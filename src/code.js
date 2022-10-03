@@ -1,31 +1,22 @@
-function getTSEResults(url="https://resultados.tse.jus.br/oficial/ele2022/544/dados-simplificados/br/br-c0001-e000544-r.json"){
-  //make request
-  const request = UrlFetchApp.fetch(url);
-
-  const code = request.getResponseCode();
-  console.log('Request returned ', code);
-
-  if(code!=200){
-    return getTSEResults();
-  }
-
-  const result = JSON.parse(request.getContentText("UTF-8").replace('&apos;', "'"));
-
-  //structure return
-
+function getTSEResults(){
+  const url="https://resultados.tse.jus.br/oficial/ele2022/544/dados-simplificados/br/br-c0001-e000544-r.json";
+    const result = request(url);
   const request_timestamp = new Date();
 
   let {
     ht: update_timestamp, 
     psi: porcentagem_apurados, 
-    si: total_apurados, 
+    vv: total_apurados, 
     cand: dados_candidatos, 
     pvb: porcentagem_brancos, 
     ptvn: porcentagem_nulos,
     pa: porcentagem_abstencao
     } = result;
+
   update_timestamp = new Date('2022-10-02T'+update_timestamp);
-  dados_candidatos = dados_candidatos.map(({ nm: nome, pvap: porcentagem_votos, vap: total_votos})=>{
+
+  dados_candidatos = dados_candidatos.map(
+    ({ nm: nome, pvap: porcentagem_votos, vap: total_votos})=>{
     return {
       request_timestamp, 
       update_timestamp,
@@ -77,22 +68,44 @@ function saveData(){
   writeJsonToSheet(dados_candidatos, 'Dados candidatos', true);
 
   writeJsonToSheet(dados_candidatos, 'Ultimos valores', false);
+  
+  updateCoverage();
 }
 
 
+function updateCoverage(){
+  let url_estados = `https://resultados.tse.jus.br/oficial/ele2022/544/dados-simplificados/sp/sp-c0001-e000544-r.json`;
+
+  const estados = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('estados');
+
+  let values = estados.getRange('A2:C28').getValues();
+
+  
+  values= values.map((row)=>{
+    const sigla = row[2].toLowerCase()
+    const url = `https://resultados.tse.jus.br/oficial/ele2022/544/dados-simplificados/${sigla}/${sigla}-c0001-e000544-r.json`;
+    console.log(url);
+    const results = request(url);
+    let candidatos = parseCand(results.cand);
+    return [
+      ...row, 
+      parseFloat(results.psi.replace(',','.')), 
+      candidatos["LULA"], 
+      candidatos["JAIR BOLSONARO"]]
+  })
+
+  estados.getRange('A2:F28').setValues(values);
+}
 
 
-
-
-
-
-
-
-
-
-
-
-
+function parseCand(cand){
+  return Object.fromEntries(
+    cand.map(
+      ({nm: name, pvap: porcentatem})=>
+      [name,parseFloat(porcentatem.replace(',','.'))]
+      )
+  );
+}
 
 
 
